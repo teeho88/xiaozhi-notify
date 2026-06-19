@@ -36,4 +36,15 @@ class Prefs(ctx: Context) {
     var lastStatus: String
         get() = sp.getString("status", "Chưa gửi") ?: "Chưa gửi"
         set(v) = sp.edit().putString("status", v).apply()
+
+    /** Optional manual device IP. When set, used directly instead of mDNS
+     *  discovery (fallback for networks where discovery fails). */
+    var manualHost: String
+        get() = sp.getString("manual", "") ?: ""
+        set(v) = sp.edit().putString("manual", v.trim()).apply()
+
+    /** Packages whose notifications are forwarded. Empty = forward all apps. */
+    var allowedApps: Set<String>
+        get() = sp.getStringSet("apps", emptySet()) ?: emptySet()
+        set(v) = sp.edit().putStringSet("apps", v).apply()
 }

@@ -14,6 +14,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private lateinit var edtToken: TextInputEditText
+    private lateinit var edtHost: TextInputEditText
     private lateinit var lblAccess: TextView
     private lateinit var lblInfo: TextView
 
@@ -23,9 +24,11 @@ class MainActivity : AppCompatActivity() {
         prefs = Prefs(this)
 
         edtToken = findViewById(R.id.edtToken)
+        edtHost = findViewById(R.id.edtHost)
         lblAccess = findViewById(R.id.lblAccess)
         lblInfo = findViewById(R.id.lblInfo)
         edtToken.setText(prefs.token)
+        edtHost.setText(prefs.manualHost)
 
         findViewById<MaterialButton>(R.id.btnGrant).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -34,6 +37,14 @@ class MainActivity : AppCompatActivity() {
             prefs.token = edtToken.text?.toString().orEmpty()
             toast("Đã lưu token")
             updateInfo()
+        }
+        findViewById<MaterialButton>(R.id.btnSaveHost).setOnClickListener {
+            prefs.manualHost = edtHost.text?.toString().orEmpty()
+            toast(if (prefs.manualHost.isEmpty()) "Đã xoá IP thủ công (dùng tự dò)" else "Đã lưu IP ${prefs.manualHost}")
+            updateInfo()
+        }
+        findViewById<MaterialButton>(R.id.btnApps).setOnClickListener {
+            startActivity(Intent(this, AppsActivity::class.java))
         }
         findViewById<MaterialSwitch>(R.id.swEnabled).apply {
             isChecked = prefs.enabled
@@ -77,8 +88,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateInfo() {
-        val host = prefs.host.ifEmpty { "(chưa tìm thấy)" }
-        lblInfo.text = "Đồng hồ: $host\nID máy: ${prefs.deviceId}\n${prefs.lastStatus}"
+        val host = when {
+            prefs.manualHost.isNotEmpty() -> "${prefs.manualHost} (thủ công)"
+            prefs.host.isNotEmpty() -> "${prefs.host} (tự dò)"
+            else -> "(chưa tìm thấy)"
+        }
+        val apps = prefs.allowedApps.size.let { if (it == 0) "chưa chọn (không nhận gì)" else "$it ứng dụng" }
+        lblInfo.text = "Đồng hồ: $host\nỨng dụng nhận: $apps\n${prefs.lastStatus}"
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()

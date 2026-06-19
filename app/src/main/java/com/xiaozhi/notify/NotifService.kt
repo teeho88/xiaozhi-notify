@@ -25,6 +25,10 @@ class NotifService : NotificationListenerService() {
         if (!prefs.enabled) return
         if (sbn.packageName == packageName) return
 
+        // Per-app filter: only forward apps the user explicitly selected.
+        // Empty selection = forward nothing (must pick apps first).
+        if (sbn.packageName !in prefs.allowedApps) return
+
         val n = sbn.notification ?: return
         val flags = n.flags
         if (flags and Notification.FLAG_GROUP_SUMMARY != 0) return

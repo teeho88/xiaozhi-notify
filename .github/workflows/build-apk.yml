@@ -24,12 +24,29 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      # Generate a release keystore on the runner. NOTE: a fresh key is created
+      # each build, so its signature differs between runs — to update the app
+      # in place (no uninstall) keep the SAME APK, or store this keystore as a
+      # secret and decode it here instead of regenerating.
+      - name: Generate keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release.jks" \
+            -alias xiaozhi -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass xiaozhi123 -keypass xiaozhi123 \
+            -dname "CN=XiaoZhi Notify, OU=Dev, O=XiaoZhi, C=VN"
+
+      - name: Build release APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: xiaozhi123
+          KEY_ALIAS: xiaozhi
+          KEY_PASSWORD: xiaozhi123
+        run: gradle assembleRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v5
         with:
           name: xiaozhi-notify-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

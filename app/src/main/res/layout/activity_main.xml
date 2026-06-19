@@ -60,6 +60,27 @@
             android:layout_marginBottom="16dp"
             android:text="Lưu token" />
 
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="IP đồng hồ (tùy chọn — chỉ khi tự dò không ra)">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/edtHost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveHost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:text="Lưu IP thủ công" />
+
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/swEnabled"
             android:layout_width="match_parent"
@@ -72,6 +93,12 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:text="Gồm cả thông báo thường trú (đang phát nhạc, tải...)" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Chọn ứng dụng gửi" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDiscover"

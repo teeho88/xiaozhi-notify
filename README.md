@@ -23,6 +23,11 @@ gradle wrapper            # chỉ cần lần đầu, nếu chưa có gradlew
 ./gradlew assembleDebug
 ```
 
+### Build qua GitHub Actions (không cài gì trên máy)
+Push `android-notify-app/` làm gốc repo → tab **Actions** tự build **APK release đã ký** → tải artifact `xiaozhi-notify-apk` (`app-release.apk`). Workflow tự sinh keystore và ký.
+
+> Mỗi lần build CI tạo key mới → chữ ký khác nhau, nên muốn **cập nhật đè** (không gỡ app cũ) thì giữ lại đúng file APK đó, hoặc lưu keystore thành secret rồi giải mã trong workflow thay vì sinh mới.
+
 ## Dùng trên điện thoại
 
 1. Cài APK, mở app.

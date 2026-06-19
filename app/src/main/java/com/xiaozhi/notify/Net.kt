@@ -43,14 +43,20 @@ object Net {
                 statusListener?.invoke()
                 return@execute
             }
-            var ok = post(prefs, app, title, text)
-            if (!ok) {
-                // Cached address stale (or none yet): re-discover, then retry once.
+            val manual = prefs.manualHost.isNotEmpty()
+            var code = post(prefs, app, title, text)
+            if (code !in 200..299 && !manual) {
+                // mDNS address stale/missing: re-discover, then retry once.
                 discoverBlocking(appCtx, 5000)
-                ok = post(Prefs(appCtx), app, title, text)
+                code = post(Prefs(appCtx), app, title, text)
             }
-            prefs.lastStatus = if (ok) "Đã gửi: ${title.ifBlank { text }}"
-                               else "Lỗi gửi — kiểm tra WiFi/token"
+            prefs.lastStatus = when {
+                code in 200..299 -> "Đã gửi: ${title.ifBlank { text }}"
+                code == 403 -> "Sai token hoặc chưa ghép điện thoại"
+                code == -2 -> "Không tìm thấy đồng hồ (mDNS) — nhập IP thủ công"
+                code == -1 -> "Không kết nối được — sai IP, hoặc khác WiFi với đồng hồ"
+                else -> "Lỗi HTTP $code"
+            }
             statusListener?.invoke()
         }
     }
@@ -66,11 +72,14 @@ object Net {
 
     // ---- HTTP ---------------------------------------------------------------
 
-    private fun post(prefs: Prefs, app: String, title: String, text: String): Boolean {
-        val host = prefs.host
-        if (host.isEmpty()) return false
+    /** Returns the HTTP status code, or -1 connect/timeout error, -2 no host. */
+    private fun post(prefs: Prefs, app: String, title: String, text: String): Int {
+        val manual = prefs.manualHost
+        val host = if (manual.isNotEmpty()) manual else prefs.host
+        val port = if (manual.isNotEmpty()) 80 else prefs.port
+        if (host.isEmpty()) return -2
         return try {
-            val url = URL("http://$host:${prefs.port}/api/notify")
+            val url = URL("http://$host:$port/api/notify")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.connectTimeout = 4000
@@ -88,10 +97,10 @@ object Net {
             val code = conn.responseCode
             conn.disconnect()
             Log.i(TAG, "POST $host -> $code")
-            code in 200..299
+            code
         } catch (e: Exception) {
             Log.w(TAG, "POST failed: ${e.message}")
-            false
+            -1
         }
     }
 
