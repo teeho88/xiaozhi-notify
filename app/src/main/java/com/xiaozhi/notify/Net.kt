@@ -38,8 +38,8 @@ object Net {
         val appCtx = ctx.applicationContext
         exec.execute {
             val prefs = Prefs(appCtx)
-            if (prefs.token.isEmpty()) {
-                prefs.lastStatus = "Chưa nhập token"
+            if (prefs.token.isEmpty() || prefs.deviceKey.isEmpty()) {
+                prefs.lastStatus = "Chưa dán URL từ trang /notify"
                 statusListener?.invoke()
                 return@execute
             }
@@ -52,7 +52,7 @@ object Net {
             }
             prefs.lastStatus = when {
                 code in 200..299 -> "Đã gửi: ${title.ifBlank { text }}"
-                code == 403 -> "Sai token hoặc chưa ghép điện thoại"
+                code == 403 -> "Sai URL, hoặc thiết bị này đã bị huỷ kết nối — dán lại URL từ /notify"
                 code == -2 -> "Không tìm thấy đồng hồ (mDNS) — nhập IP thủ công"
                 code == -1 -> "Không kết nối được — sai IP, hoặc khác WiFi với đồng hồ"
                 else -> "Lỗi HTTP $code"
@@ -88,7 +88,7 @@ object Net {
             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             val body = JSONObject()
                 .put("token", prefs.token)
-                .put("id", prefs.deviceId)
+                .put("dev", prefs.deviceKey)
                 .put("app", app)
                 .put("title", title)
                 .put("text", text)

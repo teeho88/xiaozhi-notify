@@ -43,13 +43,13 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="2. Token (xem ở trang /notify trên đồng hồ)">
+            android:hint="2. Dán URL từ trang /notify (bấm Kết nối rồi Sao chép URL)">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edtToken"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="text"
+                android:inputType="textUri"
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -58,7 +58,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="Lưu token" />
+            android:text="Lưu URL" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"

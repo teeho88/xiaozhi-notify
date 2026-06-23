@@ -1,19 +1,21 @@
 package com.xiaozhi.notify
 
 import android.content.Context
-import android.provider.Settings
 
-/** Thin SharedPreferences wrapper holding the pairing token, the last-known
- *  device address discovered via mDNS, and user toggles. */
+/** Thin SharedPreferences wrapper holding the pairing token + device key, the
+ *  last-known device address discovered via mDNS, and user toggles. */
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("xiaozhi", Context.MODE_PRIVATE)
-
-    /** Stable per-install id used as the firmware "phone" pairing key. */
-    val deviceId: String = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "android"
 
     var token: String
         get() = sp.getString("token", "") ?: ""
         set(v) = sp.edit().putString("token", v.trim()).apply()
+
+    /** Device key (the firmware "dev" lock), copied from the /notify page after
+     *  pressing "Kết nối". Only the connected device's key is accepted. */
+    var deviceKey: String
+        get() = sp.getString("devkey", "") ?: ""
+        set(v) = sp.edit().putString("devkey", v.trim()).apply()
 
     var enabled: Boolean
         get() = sp.getBoolean("enabled", true)

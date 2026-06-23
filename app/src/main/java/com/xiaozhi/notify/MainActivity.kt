@@ -1,6 +1,7 @@
 package com.xiaozhi.notify
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.TextView
@@ -34,9 +35,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
         findViewById<MaterialButton>(R.id.btnSaveToken).setOnClickListener {
-            prefs.token = edtToken.text?.toString().orEmpty()
-            toast("Đã lưu token")
-            updateInfo()
+            saveFromUrl(edtToken.text?.toString().orEmpty())
         }
         findViewById<MaterialButton>(R.id.btnSaveHost).setOnClickListener {
             prefs.manualHost = edtHost.text?.toString().orEmpty()
@@ -62,7 +61,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<MaterialButton>(R.id.btnTest).setOnClickListener {
-            if (prefs.token.isEmpty()) { toast("Nhập token trước"); return@setOnClickListener }
+            if (prefs.token.isEmpty() || prefs.deviceKey.isEmpty()) { toast("Dán URL từ /notify trước"); return@setOnClickListener }
             Net.send(this, "XiaoZhi Notify", "Thông báo thử", "Nếu đồng hồ hiện dòng này, kết nối đã hoạt động.")
             toast("Đã gửi thử")
         }
@@ -95,6 +94,23 @@ class MainActivity : AppCompatActivity() {
         }
         val apps = prefs.allowedApps.size.let { if (it == 0) "chưa chọn (không nhận gì)" else "$it ứng dụng" }
         lblInfo.text = "Đồng hồ: $host\nỨng dụng nhận: $apps\n${prefs.lastStatus}"
+    }
+
+    /** Parse the full URL copied from the /notify page (?token=..&dev=..) and
+     *  store both. Falls back to treating the input as a raw token. */
+    private fun saveFromUrl(input: String) {
+        val s = input.trim()
+        val tok = runCatching { Uri.parse(s).getQueryParameter("token") }.getOrNull()
+        val dev = runCatching { Uri.parse(s).getQueryParameter("dev") }.getOrNull()
+        if (!tok.isNullOrEmpty() && !dev.isNullOrEmpty()) {
+            prefs.token = tok
+            prefs.deviceKey = dev
+            toast("Đã lưu token + mã thiết bị")
+        } else {
+            prefs.token = s
+            toast("Không thấy mã thiết bị trong URL — hãy dán URL đầy đủ từ trang /notify")
+        }
+        updateInfo()
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
