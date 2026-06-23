@@ -43,22 +43,30 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="2. Dán URL từ trang /notify (bấm Kết nối rồi Sao chép URL)">
+            android:hint="2. Tên thiết bị này (hiện trên đồng hồ)">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/edtToken"
+                android:id="@+id/edtName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textUri"
+                android:inputType="text"
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSaveToken"
+            android:id="@+id/btnPair"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:text="Lưu URL" />
+            android:layout_marginBottom="4dp"
+            android:text="Ghép với đồng hồ" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Đồng hồ sẽ hiện popup — chạm Đồng ý để kết nối. Đổi máy: bấm Huỷ kết nối ở trang /notify rồi ghép lại."
+            android:textSize="12sp"
+            android:paddingBottom="16dp"
+            android:textColor="#888888" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"

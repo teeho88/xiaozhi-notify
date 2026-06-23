@@ -20,8 +20,10 @@ import java.util.concurrent.TimeUnit
  * at the app layer, so it works even on routers that can't resolve ".local" for
  * a plain HTTP client) and forwards notifications to its /api/notify endpoint.
  *
- * The resolved address is cached in Prefs; each send tries the cache first and
- * only re-discovers when the cached address fails (e.g. after a network switch).
+ * Pairing is automatic + confirmed on the watch: pair() discovers the device,
+ * sends a pair request, and polls until the user taps "Đồng ý" on the screen.
+ * Because the host is resolved via mDNS on every send, the pairing survives the
+ * watch's IP changing on WiFi reconnect — the key stays constant.
  */
 object Net {
     private const val TAG = "XiaoZhiNet"
@@ -38,21 +40,22 @@ object Net {
         val appCtx = ctx.applicationContext
         exec.execute {
             val prefs = Prefs(appCtx)
-            if (prefs.token.isEmpty() || prefs.deviceKey.isEmpty()) {
-                prefs.lastStatus = "Chưa dán URL từ trang /notify"
+            if (!prefs.paired) {
+                prefs.lastStatus = "Chưa ghép với đồng hồ"
                 statusListener?.invoke()
                 return@execute
             }
             val manual = prefs.manualHost.isNotEmpty()
-            var code = post(prefs, app, title, text)
+            var code = postNotify(prefs, app, title, text)
             if (code !in 200..299 && !manual) {
                 // mDNS address stale/missing: re-discover, then retry once.
                 discoverBlocking(appCtx, 5000)
-                code = post(Prefs(appCtx), app, title, text)
+                code = postNotify(Prefs(appCtx), app, title, text)
             }
+            if (code == 403) Prefs(appCtx).paired = false  // watch dropped us
             prefs.lastStatus = when {
                 code in 200..299 -> "Đã gửi: ${title.ifBlank { text }}"
-                code == 403 -> "Sai URL, hoặc thiết bị này đã bị huỷ kết nối — dán lại URL từ /notify"
+                code == 403 -> "Đồng hồ đã huỷ ghép — hãy ghép lại"
                 code == -2 -> "Không tìm thấy đồng hồ (mDNS) — nhập IP thủ công"
                 code == -1 -> "Không kết nối được — sai IP, hoặc khác WiFi với đồng hồ"
                 else -> "Lỗi HTTP $code"
@@ -70,10 +73,83 @@ object Net {
         }
     }
 
+    /**
+     * Drive the full pairing handshake. onResult(status, holder) is posted to the
+     * main thread possibly several times: first "pending" (waiting for the user
+     * to tap Đồng ý on the watch), then a terminal status:
+     *   paired | busy | rejected | expired | nohost | neterr
+     */
+    fun pair(ctx: Context, onResult: (String, String) -> Unit) {
+        val appCtx = ctx.applicationContext
+        exec.execute {
+            val prefs = Prefs(appCtx)
+            if (prefs.host.isEmpty() && prefs.manualHost.isEmpty()) {
+                if (!discoverBlocking(appCtx, 6000)) { postUi(onResult, "nohost", ""); return@execute }
+            }
+            var r = postPair(Prefs(appCtx), true)
+            if (r.first == "neterr" && prefs.manualHost.isEmpty()) {
+                discoverBlocking(appCtx, 5000)
+                r = postPair(Prefs(appCtx), true)
+            }
+            if (r.first != "pending") { finishPair(appCtx, r, onResult); return@execute }
+            postUi(onResult, "pending", "")
+            var tries = 20  // ~40s, matches the watch's 30s prompt + margin
+            while (tries-- > 0) {
+                try { Thread.sleep(2000) } catch (_: InterruptedException) {}
+                val p = postPair(Prefs(appCtx), false)
+                if (p.first == "pending") continue
+                finishPair(appCtx, p, onResult); return@execute
+            }
+            postUi(onResult, "expired", "")
+        }
+    }
+
+    private fun finishPair(ctx: Context, r: Pair<String, String>, onResult: (String, String) -> Unit) {
+        if (r.first == "paired") Prefs(ctx).paired = true
+        postUi(onResult, r.first, r.second)
+    }
+
+    private fun postUi(onResult: (String, String) -> Unit, status: String, holder: String) {
+        Handler(Looper.getMainLooper()).post { onResult(status, holder) }
+    }
+
     // ---- HTTP ---------------------------------------------------------------
 
-    /** Returns the HTTP status code, or -1 connect/timeout error, -2 no host. */
-    private fun post(prefs: Prefs, app: String, title: String, text: String): Int {
+    /** POST /api/notify/pair {key,name,force} -> (status, holder). */
+    private fun postPair(prefs: Prefs, force: Boolean): Pair<String, String> {
+        val manual = prefs.manualHost
+        val host = if (manual.isNotEmpty()) manual else prefs.host
+        val port = if (manual.isNotEmpty()) 80 else prefs.port
+        if (host.isEmpty()) return Pair("nohost", "")
+        return try {
+            val url = URL("http://$host:$port/api/notify/pair")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 4000
+            conn.readTimeout = 4000
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            val body = JSONObject()
+                .put("key", prefs.key)
+                .put("name", prefs.displayName())
+                .put("force", force)
+                .toString()
+            conn.outputStream.use { os: OutputStream -> os.write(body.toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val resp = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            conn.disconnect()
+            if (code !in 200..299) return Pair("neterr", "")
+            val o = JSONObject(resp)
+            Pair(o.optString("status", "expired"), o.optString("holder", ""))
+        } catch (e: Exception) {
+            Log.w(TAG, "pair failed: ${e.message}")
+            Pair("neterr", "")
+        }
+    }
+
+    /** POST /api/notify {key,app,title,text}. Returns HTTP code, or -1/-2 error. */
+    private fun postNotify(prefs: Prefs, app: String, title: String, text: String): Int {
         val manual = prefs.manualHost
         val host = if (manual.isNotEmpty()) manual else prefs.host
         val port = if (manual.isNotEmpty()) 80 else prefs.port
@@ -87,8 +163,7 @@ object Net {
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             val body = JSONObject()
-                .put("token", prefs.token)
-                .put("dev", prefs.deviceKey)
+                .put("key", prefs.key)
                 .put("app", app)
                 .put("title", title)
                 .put("text", text)

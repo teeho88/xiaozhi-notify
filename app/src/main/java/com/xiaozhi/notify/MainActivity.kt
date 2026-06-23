@@ -1,7 +1,6 @@
 package com.xiaozhi.notify
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.TextView
@@ -14,7 +13,7 @@ import com.google.android.material.textfield.TextInputEditText
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
-    private lateinit var edtToken: TextInputEditText
+    private lateinit var edtName: TextInputEditText
     private lateinit var edtHost: TextInputEditText
     private lateinit var lblAccess: TextView
     private lateinit var lblInfo: TextView
@@ -24,18 +23,20 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         prefs = Prefs(this)
 
-        edtToken = findViewById(R.id.edtToken)
+        edtName = findViewById(R.id.edtName)
         edtHost = findViewById(R.id.edtHost)
         lblAccess = findViewById(R.id.lblAccess)
         lblInfo = findViewById(R.id.lblInfo)
-        edtToken.setText(prefs.token)
+        edtName.setText(prefs.displayName())
         edtHost.setText(prefs.manualHost)
 
         findViewById<MaterialButton>(R.id.btnGrant).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
-        findViewById<MaterialButton>(R.id.btnSaveToken).setOnClickListener {
-            saveFromUrl(edtToken.text?.toString().orEmpty())
+        findViewById<MaterialButton>(R.id.btnPair).setOnClickListener {
+            prefs.name = edtName.text?.toString().orEmpty()
+            toast("Đang tìm đồng hồ...")
+            Net.pair(this) { status, holder -> onPairResult(status, holder) }
         }
         findViewById<MaterialButton>(R.id.btnSaveHost).setOnClickListener {
             prefs.manualHost = edtHost.text?.toString().orEmpty()
@@ -61,7 +62,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<MaterialButton>(R.id.btnTest).setOnClickListener {
-            if (prefs.token.isEmpty() || prefs.deviceKey.isEmpty()) { toast("Dán URL từ /notify trước"); return@setOnClickListener }
+            if (!prefs.paired) { toast("Hãy ghép với đồng hồ trước"); return@setOnClickListener }
             Net.send(this, "XiaoZhi Notify", "Thông báo thử", "Nếu đồng hồ hiện dòng này, kết nối đã hoạt động.")
             toast("Đã gửi thử")
         }
@@ -79,6 +80,19 @@ class MainActivity : AppCompatActivity() {
         Net.statusListener = null
     }
 
+    private fun onPairResult(status: String, holder: String) {
+        when (status) {
+            "pending" -> toast("Hãy chạm \"Đồng ý\" trên màn hình đồng hồ...")
+            "paired" -> toast("Đã ghép xong ✓")
+            "busy" -> toast("Đồng hồ đang ghép với \"$holder\". Huỷ kết nối trên máy đó (hoặc trang /notify) trước.")
+            "rejected" -> toast("Bị từ chối trên đồng hồ")
+            "expired" -> toast("Hết thời gian chờ — thử ghép lại")
+            "nohost" -> toast("Không tìm thấy đồng hồ (mDNS) — cùng WiFi chưa?")
+            else -> toast("Không kết nối được đồng hồ")
+        }
+        updateInfo()
+    }
+
     private fun updateAccess() {
         val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
             ?.contains(packageName) == true
@@ -92,25 +106,9 @@ class MainActivity : AppCompatActivity() {
             prefs.host.isNotEmpty() -> "${prefs.host} (tự dò)"
             else -> "(chưa tìm thấy)"
         }
+        val pair = if (prefs.paired) "Đã ghép (${prefs.displayName()})" else "CHƯA ghép"
         val apps = prefs.allowedApps.size.let { if (it == 0) "chưa chọn (không nhận gì)" else "$it ứng dụng" }
-        lblInfo.text = "Đồng hồ: $host\nỨng dụng nhận: $apps\n${prefs.lastStatus}"
-    }
-
-    /** Parse the full URL copied from the /notify page (?token=..&dev=..) and
-     *  store both. Falls back to treating the input as a raw token. */
-    private fun saveFromUrl(input: String) {
-        val s = input.trim()
-        val tok = runCatching { Uri.parse(s).getQueryParameter("token") }.getOrNull()
-        val dev = runCatching { Uri.parse(s).getQueryParameter("dev") }.getOrNull()
-        if (!tok.isNullOrEmpty() && !dev.isNullOrEmpty()) {
-            prefs.token = tok
-            prefs.deviceKey = dev
-            toast("Đã lưu token + mã thiết bị")
-        } else {
-            prefs.token = s
-            toast("Không thấy mã thiết bị trong URL — hãy dán URL đầy đủ từ trang /notify")
-        }
-        updateInfo()
+        lblInfo.text = "Ghép: $pair\nĐồng hồ: $host\nỨng dụng nhận: $apps\n${prefs.lastStatus}"
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
