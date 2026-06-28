@@ -117,12 +117,8 @@ object Net {
 
     /** POST /api/notify/pair {key,name,force} -> (status, holder). */
     private fun postPair(prefs: Prefs, force: Boolean): Pair<String, String> {
-        val manual = prefs.manualHost
-        val host = if (manual.isNotEmpty()) manual else prefs.host
-        val port = if (manual.isNotEmpty()) 80 else prefs.port
-        if (host.isEmpty()) return Pair("nohost", "")
+        val url = endpoint(prefs, "/api/notify/pair") ?: return Pair("nohost", "")
         return try {
-            val url = URL("http://$host:$port/api/notify/pair")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.connectTimeout = 4000
@@ -150,12 +146,8 @@ object Net {
 
     /** POST /api/notify {key,app,title,text}. Returns HTTP code, or -1/-2 error. */
     private fun postNotify(prefs: Prefs, app: String, title: String, text: String): Int {
-        val manual = prefs.manualHost
-        val host = if (manual.isNotEmpty()) manual else prefs.host
-        val port = if (manual.isNotEmpty()) 80 else prefs.port
-        if (host.isEmpty()) return -2
+        val url = endpoint(prefs, "/api/notify") ?: return -2
         return try {
-            val url = URL("http://$host:$port/api/notify")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.connectTimeout = 4000
@@ -171,12 +163,51 @@ object Net {
             conn.outputStream.use { os: OutputStream -> os.write(body.toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
             conn.disconnect()
-            Log.i(TAG, "POST $host -> $code")
+            Log.i(TAG, "POST ${url.host} -> $code")
             code
         } catch (e: Exception) {
             Log.w(TAG, "POST failed: ${e.message}")
             -1
         }
+    }
+
+    private data class Target(val host: String, val port: Int)
+
+    private fun endpoint(prefs: Prefs, path: String): URL? {
+        val target = if (prefs.manualHost.isNotEmpty()) {
+            parseManualTarget(prefs.manualHost)
+        } else if (prefs.host.isNotEmpty()) {
+            Target(prefs.host, if (prefs.port > 0) prefs.port else 80)
+        } else {
+            null
+        } ?: return null
+        return URL("http://${urlHost(target.host)}:${target.port}$path")
+    }
+
+    private fun parseManualTarget(raw: String): Target? {
+        var s = raw.trim()
+        if (s.isEmpty()) return null
+        s = s.removePrefix("http://").removePrefix("https://").substringBefore('/').trim()
+        if (s.isEmpty()) return null
+        if (s.startsWith("[")) {
+            val host = s.substringAfter('[').substringBefore(']')
+            val rest = s.substringAfter(']', "")
+            val port = rest.removePrefix(":").toIntOrNull() ?: 80
+            return Target(host, port)
+        }
+        val colonCount = s.count { it == ':' }
+        if (colonCount == 1) {
+            val host = s.substringBefore(':')
+            val port = s.substringAfter(':').toIntOrNull() ?: 80
+            return Target(host, port)
+        }
+        return Target(s, 80)
+    }
+
+    private fun urlHost(host: String): String {
+        val h = host.trim().removeSurrounding("[", "]")
+        if (h.isEmpty()) return h
+        return if (h.contains(':')) "[${h.replace("%", "%25")}]" else h
     }
 
     // ---- mDNS discovery -----------------------------------------------------
@@ -192,6 +223,7 @@ object Net {
         }
         val latch = CountDownLatch(1)
         var resolved = false  // visibility guaranteed by latch await/countDown
+        var resolving = false
 
         val resolveListener = object : NsdManager.ResolveListener {
             override fun onServiceResolved(info: NsdServiceInfo) {
@@ -213,9 +245,10 @@ object Net {
 
         val discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onServiceFound(info: NsdServiceInfo) {
-                if (info.serviceType.contains("xiaozhi-notify")) {
-                    try { nsd.resolveService(info, resolveListener) } catch (_: Exception) {}
-                }
+                if (!info.serviceType.contains("xiaozhi-notify")) return
+                if (resolving || resolved) return
+                resolving = true
+                try { nsd.resolveService(info, resolveListener) } catch (_: Exception) { latch.countDown() }
             }
             override fun onServiceLost(info: NsdServiceInfo) {}
             override fun onDiscoveryStarted(t: String) {}

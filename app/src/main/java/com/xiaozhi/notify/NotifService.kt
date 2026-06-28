@@ -1,6 +1,7 @@
 package com.xiaozhi.notify
 
 import android.app.Notification
+import android.os.Parcelable
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
@@ -34,10 +35,7 @@ class NotifService : NotificationListenerService() {
         if (flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (!prefs.includeOngoing && flags and Notification.FLAG_ONGOING_EVENT != 0) return
 
-        val extras = n.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val text = (extras.getCharSequence(Notification.EXTRA_TEXT)
-            ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT))?.toString().orEmpty()
+        val (title, text) = extractContent(n)
         if (title.isBlank() && text.isBlank()) return
 
         // Drop duplicates the system re-posts within a short window.
@@ -56,4 +54,53 @@ class NotifService : NotificationListenerService() {
     } catch (_: Exception) {
         pkg
     }
+
+    private data class Content(val title: String, val text: String)
+
+    private fun extractContent(n: Notification): Content {
+        val extras = n.extras
+        fun cs(key: String): String = extras.getCharSequence(key)?.toString()?.trim().orEmpty()
+
+        val title = firstNonBlank(
+            cs(Notification.EXTRA_TITLE),
+            cs(Notification.EXTRA_TITLE_BIG),
+            cs(Notification.EXTRA_CONVERSATION_TITLE)
+        )
+        val text = firstNonBlank(
+            cs(Notification.EXTRA_TEXT),
+            latestMessageText(n),
+            textLines(n),
+            cs(Notification.EXTRA_BIG_TEXT),
+            cs(Notification.EXTRA_SUB_TEXT),
+            cs(Notification.EXTRA_SUMMARY_TEXT),
+            cs(Notification.EXTRA_INFO_TEXT),
+            n.tickerText?.toString()?.trim().orEmpty()
+        )
+        return Content(title, text)
+    }
+
+    private fun latestMessageText(n: Notification): String {
+        val arr = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return ""
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            val messages = Notification.MessagingStyle.Message.getMessagesFromBundleArray(
+                arr as Array<Parcelable>
+            ) ?: return ""
+            messages.asReversed()
+                .firstOrNull { !it.text.isNullOrBlank() }
+                ?.text?.toString()?.trim().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun textLines(n: Notification): String {
+        val lines = n.extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES) ?: return ""
+        return lines.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+            .takeLast(3)
+            .joinToString("\n")
+    }
+
+    private fun firstNonBlank(vararg values: String): String =
+        values.firstOrNull { it.isNotBlank() }.orEmpty()
 }
