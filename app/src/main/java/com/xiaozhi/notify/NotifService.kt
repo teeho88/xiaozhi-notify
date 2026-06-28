@@ -63,7 +63,7 @@ class NotifService : NotificationListenerService() {
 
         val title = firstNonBlank(
             cs(Notification.EXTRA_TITLE),
-            cs(Notification.EXTRA_CONVERSATION_TITLE)
+            cs(EXTRA_CONVERSATION_TITLE_KEY)
         )
         val text = firstNonBlank(
             cs(Notification.EXTRA_TEXT),
@@ -79,15 +79,17 @@ class NotifService : NotificationListenerService() {
     }
 
     private fun latestMessageText(n: Notification): String {
-        val arr = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return ""
-        return arr.asReversed().firstNotNullOfOrNull { parcelable ->
-            val bundle = parcelable as? Bundle ?: return@firstNotNullOfOrNull null
-            bundle.getCharSequence("text")?.toString()?.trim()?.takeIf(String::isNotEmpty)
-        }.orEmpty()
+        val arr = n.extras.getParcelableArray(EXTRA_MESSAGES_KEY) ?: return ""
+        for (i in arr.indices.reversed()) {
+            val bundle = arr[i] as? Bundle ?: continue
+            val text = bundle.getCharSequence("text")?.toString()?.trim().orEmpty()
+            if (text.isNotEmpty()) return text
+        }
+        return ""
     }
 
     private fun textLines(n: Notification): String {
-        val lines = n.extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES) ?: return ""
+        val lines = n.extras.getCharSequenceArray(EXTRA_TEXT_LINES_KEY) ?: return ""
         return lines.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
             .takeLast(3)
             .joinToString("\n")
@@ -95,4 +97,10 @@ class NotifService : NotificationListenerService() {
 
     private fun firstNonBlank(vararg values: String): String =
         values.firstOrNull { it.isNotBlank() }.orEmpty()
+
+    companion object {
+        private const val EXTRA_CONVERSATION_TITLE_KEY = "android.conversationTitle"
+        private const val EXTRA_MESSAGES_KEY = "android.messages"
+        private const val EXTRA_TEXT_LINES_KEY = "android.textLines"
+    }
 }
