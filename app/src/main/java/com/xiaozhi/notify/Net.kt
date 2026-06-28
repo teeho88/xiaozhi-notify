@@ -174,13 +174,13 @@ object Net {
     private data class Target(val host: String, val port: Int)
 
     private fun endpoint(prefs: Prefs, path: String): URL? {
-        val target = if (prefs.manualHost.isNotEmpty()) {
+        val target = (if (prefs.manualHost.isNotEmpty()) {
             parseManualTarget(prefs.manualHost)
         } else if (prefs.host.isNotEmpty()) {
             Target(prefs.host, if (prefs.port > 0) prefs.port else 80)
         } else {
             null
-        } ?: return null
+        }) ?: return null
         return URL("http://${urlHost(target.host)}:${target.port}$path")
     }
 
