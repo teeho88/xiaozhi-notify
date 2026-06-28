@@ -1,7 +1,7 @@
 package com.xiaozhi.notify
 
 import android.app.Notification
-import android.os.Parcelable
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
@@ -80,17 +80,10 @@ class NotifService : NotificationListenerService() {
 
     private fun latestMessageText(n: Notification): String {
         val arr = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return ""
-        return try {
-            @Suppress("UNCHECKED_CAST")
-            val messages = Notification.MessagingStyle.Message.getMessagesFromBundleArray(
-                arr as Array<Parcelable>
-            ) ?: return ""
-            messages.asReversed()
-                .firstOrNull { !it.text.isNullOrBlank() }
-                ?.text?.toString()?.trim().orEmpty()
-        } catch (_: Exception) {
-            ""
-        }
+        return arr.asReversed().firstNotNullOfOrNull { parcelable ->
+            val bundle = parcelable as? Bundle ?: return@firstNotNullOfOrNull null
+            bundle.getCharSequence("text")?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        }.orEmpty()
     }
 
     private fun textLines(n: Notification): String {
