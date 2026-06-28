@@ -62,17 +62,17 @@ class NotifService : NotificationListenerService() {
         fun cs(key: String): String = extras.getCharSequence(key)?.toString()?.trim().orEmpty()
 
         val title = firstNonBlank(
-            cs(Notification.EXTRA_TITLE),
+            cs(EXTRA_TITLE_KEY),
             cs(EXTRA_CONVERSATION_TITLE_KEY)
         )
         val text = firstNonBlank(
-            cs(Notification.EXTRA_TEXT),
+            cs(EXTRA_TEXT_KEY),
             latestMessageText(n),
             textLines(n),
-            cs(Notification.EXTRA_BIG_TEXT),
-            cs(Notification.EXTRA_SUB_TEXT),
-            cs(Notification.EXTRA_SUMMARY_TEXT),
-            cs(Notification.EXTRA_INFO_TEXT),
+            cs(EXTRA_BIG_TEXT_KEY),
+            cs(EXTRA_SUB_TEXT_KEY),
+            cs(EXTRA_SUMMARY_TEXT_KEY),
+            cs(EXTRA_INFO_TEXT_KEY),
             n.tickerText?.toString()?.trim().orEmpty()
         )
         return Content(title, text)
@@ -90,7 +90,10 @@ class NotifService : NotificationListenerService() {
 
     private fun textLines(n: Notification): String {
         val lines = n.extras.getCharSequenceArray(EXTRA_TEXT_LINES_KEY) ?: return ""
-        return lines.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+        return lines.mapNotNull {
+            val line = it?.toString()?.trim().orEmpty()
+            if (line.isNotEmpty()) line else null
+        }
             .takeLast(3)
             .joinToString("\n")
     }
@@ -99,6 +102,12 @@ class NotifService : NotificationListenerService() {
         values.firstOrNull { it.isNotBlank() }.orEmpty()
 
     companion object {
+        private const val EXTRA_TITLE_KEY = "android.title"
+        private const val EXTRA_TEXT_KEY = "android.text"
+        private const val EXTRA_BIG_TEXT_KEY = "android.bigText"
+        private const val EXTRA_SUB_TEXT_KEY = "android.subText"
+        private const val EXTRA_SUMMARY_TEXT_KEY = "android.summaryText"
+        private const val EXTRA_INFO_TEXT_KEY = "android.infoText"
         private const val EXTRA_CONVERSATION_TITLE_KEY = "android.conversationTitle"
         private const val EXTRA_MESSAGES_KEY = "android.messages"
         private const val EXTRA_TEXT_LINES_KEY = "android.textLines"
