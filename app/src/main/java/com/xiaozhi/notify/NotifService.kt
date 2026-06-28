@@ -63,7 +63,6 @@ class NotifService : NotificationListenerService() {
 
         val title = firstNonBlank(
             cs(Notification.EXTRA_TITLE),
-            cs(Notification.EXTRA_TITLE_BIG),
             cs(Notification.EXTRA_CONVERSATION_TITLE)
         )
         val text = firstNonBlank(
