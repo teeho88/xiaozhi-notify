@@ -109,13 +109,6 @@
             android:text="Chọn ứng dụng gửi" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnDiscover"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:text="Tìm đồng hồ trong WiFi" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnTest"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

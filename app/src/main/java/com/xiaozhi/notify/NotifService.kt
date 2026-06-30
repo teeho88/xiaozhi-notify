@@ -19,7 +19,7 @@ class NotifService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         // Warm up the cached address as soon as the listener binds.
-        Net.discoverAsync(this) {}
+        Net.warmUp(this)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {

@@ -9,11 +9,14 @@ import android.os.Looper
 import android.util.Log
 import org.json.JSONObject
 import java.io.OutputStream
+import java.net.Inet4Address
 import java.net.HttpURLConnection
+import java.net.NetworkInterface
 import java.net.URL
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Finds the clock on the LAN by mDNS (NsdManager does real multicast resolution
@@ -48,8 +51,8 @@ object Net {
             val manual = prefs.manualHost.isNotEmpty()
             var code = postNotify(prefs, app, title, text)
             if (code !in 200..299 && !manual) {
-                // mDNS address stale/missing: re-discover, then retry once.
-                discoverBlocking(appCtx, 5000)
+                // Address stale/missing: re-resolve (mDNS, then subnet scan), retry once.
+                resolveHost(appCtx)
                 code = postNotify(Prefs(appCtx), app, title, text)
             }
             if (code == 403) Prefs(appCtx).paired = false  // watch dropped us
@@ -64,13 +67,13 @@ object Net {
         }
     }
 
-    /** Discover on demand (used by the "Tìm thiết bị" button). */
-    fun discoverAsync(ctx: Context, done: (Boolean) -> Unit) {
+    /** Warm the cached address when the listener binds, off the send queue so a
+     *  notification arriving right after isn't stuck behind the resolve. */
+    fun warmUp(ctx: Context) {
         val appCtx = ctx.applicationContext
-        exec.execute {
-            val found = discoverBlocking(appCtx, 6000)
-            Handler(Looper.getMainLooper()).post { done(found) }
-        }
+        Thread {
+            if (Prefs(appCtx).manualHost.isEmpty()) resolveHost(appCtx)
+        }.apply { isDaemon = true }.start()
     }
 
     /**
@@ -84,11 +87,11 @@ object Net {
         exec.execute {
             val prefs = Prefs(appCtx)
             if (prefs.host.isEmpty() && prefs.manualHost.isEmpty()) {
-                if (!discoverBlocking(appCtx, 6000)) { postUi(onResult, "nohost", ""); return@execute }
+                if (!resolveHost(appCtx)) { postUi(onResult, "nohost", ""); return@execute }
             }
             var r = postPair(Prefs(appCtx), true)
             if (r.first == "neterr" && prefs.manualHost.isEmpty()) {
-                discoverBlocking(appCtx, 5000)
+                resolveHost(appCtx)
                 r = postPair(Prefs(appCtx), true)
             }
             if (r.first != "pending") { finishPair(appCtx, r, onResult); return@execute }
@@ -208,6 +211,80 @@ object Net {
         val h = host.trim().removeSurrounding("[", "]")
         if (h.isEmpty()) return h
         return if (h.contains(':')) "[${h.replace("%", "%25")}]" else h
+    }
+
+    // ---- host resolution ----------------------------------------------------
+
+    /**
+     * Resolve and cache the clock's address. Tries mDNS first (fast where it
+     * works), then falls back to a direct subnet scan. The scan is the reliable
+     * path on the many OEM Android builds where NsdManager multicast is broken
+     * or filtered — there a notification would otherwise never get a host and
+     * silently fail to send. Returns true and stores host/port in Prefs on hit.
+     */
+    private fun resolveHost(ctx: Context): Boolean =
+        discoverBlocking(ctx, 3000) || scanSubnet(ctx)
+
+    /**
+     * Probe every host on the phone's /24 in parallel for the clock, identified
+     * by its `GET /api/notify` reply (403 "device not paired" when sent without
+     * a key). Plain TCP/HTTP, so it works on every Android version regardless of
+     * mDNS support.
+     */
+    private fun scanSubnet(ctx: Context): Boolean {
+        val ip = localIpv4() ?: return false
+        val prefix = ip.substringBeforeLast('.', "")
+        if (prefix.isEmpty()) return false
+
+        val pool = Executors.newFixedThreadPool(32)
+        val found = AtomicReference<String?>(null)
+        val latch = CountDownLatch(254)
+        for (i in 1..254) {
+            val host = "$prefix.$i"
+            if (host == ip) { latch.countDown(); continue }
+            pool.execute {
+                try {
+                    if (found.get() == null && probeIsClock(host)) found.compareAndSet(null, host)
+                } finally { latch.countDown() }
+            }
+        }
+        try { latch.await(8, TimeUnit.SECONDS) } catch (_: InterruptedException) {}
+        pool.shutdownNow()
+
+        val hit = found.get() ?: return false
+        val prefs = Prefs(ctx)
+        prefs.host = hit
+        prefs.port = 80
+        Log.i(TAG, "Subnet scan resolved clock -> $hit")
+        return true
+    }
+
+    /** True if [host] answers /api/notify like the clock does (403 + our body). */
+    private fun probeIsClock(host: String): Boolean = try {
+        val conn = URL("http://$host:80/api/notify").openConnection() as HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.connectTimeout = 700
+        conn.readTimeout = 700
+        val code = conn.responseCode
+        val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            ?.bufferedReader()?.use { it.readText() } ?: ""
+        conn.disconnect()
+        code == 403 && body.contains("device not paired")
+    } catch (_: Exception) {
+        false
+    }
+
+    /** First site-local IPv4 of an up, non-loopback interface (WiFi/hotspot). */
+    private fun localIpv4(): String? = try {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .asSequence()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList().asSequence() }
+            .filterIsInstance<Inet4Address>()
+            .firstOrNull { it.isSiteLocalAddress }
+            ?.hostAddress
+    } catch (_: Exception) {
+        null
     }
 
     // ---- mDNS discovery -----------------------------------------------------

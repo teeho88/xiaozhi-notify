@@ -54,13 +54,6 @@ class MainActivity : AppCompatActivity() {
             isChecked = prefs.includeOngoing
             setOnCheckedChangeListener { _, v -> prefs.includeOngoing = v }
         }
-        findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener {
-            toast("Đang tìm...")
-            Net.discoverAsync(this) { found ->
-                toast(if (found) "Đã tìm thấy đồng hồ" else "Không thấy — cùng WiFi với đồng hồ chưa?")
-                updateInfo()
-            }
-        }
         findViewById<MaterialButton>(R.id.btnTest).setOnClickListener {
             if (!prefs.paired) { toast("Hãy ghép với đồng hồ trước"); return@setOnClickListener }
             Net.send(this, "XiaoZhi Notify", "Thông báo thử", "Nếu đồng hồ hiện dòng này, kết nối đã hoạt động.")
