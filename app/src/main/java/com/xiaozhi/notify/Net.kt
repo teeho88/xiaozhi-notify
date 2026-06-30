@@ -100,7 +100,10 @@ object Net {
             while (tries-- > 0) {
                 try { Thread.sleep(2000) } catch (_: InterruptedException) {}
                 val p = postPair(Prefs(appCtx), false)
-                if (p.first == "pending") continue
+                // A dropped poll (neterr) is transient: the watch is likely still
+                // showing the prompt. Keep waiting for the user's tap instead of
+                // aborting the whole handshake on a single network hiccup.
+                if (p.first == "pending" || p.first == "neterr") continue
                 finishPair(appCtx, p, onResult); return@execute
             }
             postUi(onResult, "expired", "")
